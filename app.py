@@ -17,7 +17,7 @@ def split_video_to_frames(video_file_path, frames_folder_path):
     index = 0
     while(True):
         ret,frame = cap.read()
-        print(f"capture ret={ret}")
+        print(f"capture ret={ret} frame={frame}")
         if ret:
             cv2.imwrite(f'{frames_folder_path}/{index}.jpg', frame)
             print(type(frame))
@@ -26,7 +26,7 @@ def split_video_to_frames(video_file_path, frames_folder_path):
         else:
             break
     cap.release()
-    print('Video cut finish, all %d frame' % index)
+    print('video split finish, all %d frame' % index)
 
 
 def turn_frames_to_humans(frames_folder_path, humans_folder_path):
@@ -39,10 +39,6 @@ def turn_frames_to_humans(frames_folder_path, humans_folder_path):
 
     # load model
     module = hub.Module(name="deeplabv3p_xception65_humanseg")
-
-    # config
-    frames_folder_path = frames_folder_path
-    print(os.listdir(frames_folder_path))
 
     test_img_path = [os.path.join(frames_folder_path, fname) for fname in os.listdir(frames_folder_path)]
     print(test_img_path)
@@ -97,7 +93,7 @@ def init_canvas(width, height, color=(255, 255, 255)):
     return canvas
 
 
-def make_green_background_file(width, height, out_path):
+def make_background_file(width, height, out_path):
     canvas = init_canvas(width, height, color=(0, 255, 0))
     cv2.imwrite(out_path, canvas)
 
@@ -119,8 +115,8 @@ def concatenate_frames_blended(frames_blended_folder_path, video_blended_file_pa
 
 
 # Config
-video_file_path = 'workspace/sample_640x360.mp4'
-green_background_file_path = 'workspace/green.jpg'
+video_file_path = 'workspace/sample.mp4'
+background_file_path = 'workspace/green.jpg'
 frames_folder_path = 'workspace/frames/'
 humans_folder_path = 'workspace/humans/'
 frames_blended_folder_path = 'workspace/frames_blended/'
@@ -131,7 +127,7 @@ if __name__ == "__main__":
     print("video to frames")
     if not os.path.exists(frames_folder_path):
         os.mkdir(frames_folder_path)
-    split_video_to_frames(video_file_path, frames_folder_path)
+        split_video_to_frames(video_file_path, frames_folder_path)
 
     # 第二步：抠图
     print("frames to humans")
@@ -141,13 +137,13 @@ if __name__ == "__main__":
 
     # 第三步：生成绿幕并合成
     print("make green background")
-    if not os.path.exists(green_background_file_path):
-        make_green_background_file(1920, 1080, green_background_file_path)
+    if not os.path.exists(background_file_path):
+        make_background_file(1920, 1080, background_file_path)
 
     print("blend humans with background")
     if not os.path.exists(frames_blended_folder_path):
         os.mkdir(frames_blended_folder_path)
-        blend_humans_with_background(humans_folder_path, green_background_file_path, frames_blended_folder_path)
+        blend_humans_with_background(humans_folder_path, background_file_path, frames_blended_folder_path)
 
     # 第四步：合成视频
     print("concatenate frames blended into video")
