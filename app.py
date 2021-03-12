@@ -6,11 +6,18 @@ from PIL import Image
 import paddlehub as hub
 
 
-def split_video_to_frames(video_path, frames_folder_path):
-    cap = cv2.VideoCapture(video_path)
+def split_video_to_frames(video_file_path, frames_folder_path):
+    print("call split_video_to_frames")
+
+    if not os.path.exists(video_file_path):
+        print(f"video file {video_file_path} do not exist.")
+        return
+
+    cap = cv2.VideoCapture(video_file_path)
     index = 0
     while(True):
-        ret,frame = cap.read() 
+        ret,frame = cap.read()
+        print(f"capture ret={ret}")
         if ret:
             cv2.imwrite(f'{frames_folder_path}/{index}.jpg', frame)
             print(type(frame))
@@ -23,8 +30,10 @@ def split_video_to_frames(video_path, frames_folder_path):
 
 
 def turn_frames_to_humans(frames_folder_path, humans_folder_path):
-    print(f"----------- frames_folder_path = {frames_folder_path}")
-    print(f"----------- humans_folder_path = {humans_folder_path}")
+    print("call turn_frames_to_humans")
+
+    print(f"frames_folder_path = {frames_folder_path}")
+    print(f"humans_folder_path = {humans_folder_path}")
 
     print(os.listdir(frames_folder_path))
 
@@ -50,6 +59,9 @@ def blend_one_human_with_background(foreground_image, background_image, frames_b
     foreground_image: 前景图片，抠出的人物图片
     background_image: 背景图片
     """
+
+    print("call blend_one_human_with_background")
+
     # 读入图片
     background_image = Image.open(background_image).convert('RGB')
     foreground_image = Image.open(foreground_image).resize(background_image.size)
@@ -66,6 +78,8 @@ def blend_one_human_with_background(foreground_image, background_image, frames_b
 
 
 def blend_humans_with_background(humans_folder_path, green_background_file_path, frames_blended_folder_path):
+    print("call blend_humans_with_background")
+
     humanseg_png = [filename for filename in os.listdir(humans_folder_path)]
     for i, img in enumerate(humanseg_png):
         img_path = os.path.join(humans_folder_path + '%d.png' % (i))
@@ -76,6 +90,8 @@ def blend_humans_with_background(humans_folder_path, green_background_file_path,
    
 
 def init_canvas(width, height, color=(255, 255, 255)):
+    print("call init_canvas")
+
     canvas = np.ones((height, width, 3), dtype="uint8")
     canvas[:] = color
     return canvas
@@ -87,6 +103,8 @@ def make_green_background_file(width, height, out_path):
 
 
 def concatenate_frames_blended(frames_blended_folder_path, video_blended_file_path, size):
+    print("call concatenate_frames_blended")
+
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(video_blended_file_path, fourcc, 3.0, size)
     files = os.listdir(frames_blended_folder_path)
@@ -109,31 +127,29 @@ frames_blended_folder_path = 'workspace/frames_blended/'
 video_blended_file_path = 'workspace/output.mp4'
 
 if __name__ == "__main__":
-    print("-----------------")
-
     # 第一步：视频->图像
-    print("------ video to image")
+    print("video to frames")
     if not os.path.exists(frames_folder_path):
         os.mkdir(frames_folder_path)
-        split_video_to_frames(video_file_path, frames_folder_path)
+    split_video_to_frames(video_file_path, frames_folder_path)
 
     # 第二步：抠图
-    print("------ get sub image")
+    print("frames to humans")
     if not os.path.exists(humans_folder_path):
         os.mkdir(humans_folder_path)
         turn_frames_to_humans(frames_folder_path, humans_folder_path)
 
     # 第三步：生成绿幕并合成
+    print("make green background")
     if not os.path.exists(green_background_file_path):
-        print("------ green")
         make_green_background_file(1920, 1080, green_background_file_path)
 
+    print("blend humans with background")
     if not os.path.exists(frames_blended_folder_path):
-        print("------ frame com")
         os.mkdir(frames_blended_folder_path)
         blend_humans_with_background(humans_folder_path, green_background_file_path, frames_blended_folder_path)
 
     # 第四步：合成视频
+    print("concatenate frames blended into video")
     if not os.path.exists(video_blended_file_path):
-        print("------ into one")
         concatenate_frames_blended(frames_blended_folder_path, video_blended_file_path, (1920, 1080))
