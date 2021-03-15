@@ -15,8 +15,8 @@ def split_video_to_frames(video_file_path, frames_folder_path):
 
     cap = cv2.VideoCapture(video_file_path)
     index = 0
-    while(True):
-        ret,frame = cap.read()
+    while True:
+        ret, frame = cap.read()
         print(f"capture ret={ret} frame={frame}")
         if ret:
             cv2.imwrite(f'{frames_folder_path}/{index}.jpg', frame)
@@ -25,6 +25,7 @@ def split_video_to_frames(video_file_path, frames_folder_path):
             index += 1
         else:
             break
+
     cap.release()
     print('video split finish, all %d frame' % index)
 
@@ -41,7 +42,6 @@ def turn_frames_to_humans(frames_folder_path, humans_folder_path):
     module = hub.Module(name="deeplabv3p_xception65_humanseg")
 
     test_img_path = [os.path.join(frames_folder_path, fname) for fname in os.listdir(frames_folder_path)]
-    print(test_img_path)
     input_dict = {"image": test_img_path}
 
     results = module.segmentation(data=input_dict, output_dir=humans_folder_path)
@@ -49,46 +49,72 @@ def turn_frames_to_humans(frames_folder_path, humans_folder_path):
         print(result)
 
 
-def blend_one_human_with_background(foreground_image, background_image, frames_blended_folder_path):
-    """
-    将抠出的人物图像换背景
-    foreground_image: 前景图片，抠出的人物图片
-    background_image: 背景图片
-    """
-
+def blend_one_human_with_background(one_human_image_path, background_image_path, one_blended_image_path):
     print("call blend_one_human_with_background")
 
-    # 读入图片
-    background_image = Image.open(background_image).convert('RGB')
-    foreground_image = Image.open(foreground_image).resize(background_image.size)
+    background_image = Image.open(background_image_path).convert('RGB')
 
-    # 图片加权合成
-    scope_map = np.array(foreground_image)[:, :, -1] / 255
-    scope_map = scope_map[:,:,np.newaxis]
+    one_human_image = Image.open(one_human_image_path).resize(background_image.size)
+
+    # PNG format = RGBA
+    one_human_image = np.array(one_human_image)
+    print(one_human_image.shape)
+    print(one_human_image[0, 0])
+
+    # transparency dimension of A in RGBA
+    one_human_image_A = one_human_image[:, :, -1]
+    # print(one_human_image_A.shape)
+    # print(one_human_image_A[0, 0])
+    # print(list(set(one_human_image_A.ravel())))
+
+    # RGB dimension in RGBA
+    one_human_image_RGB = one_human_image[:, :, :3]
+
+    scope_map = one_human_image_A / 255
+    # print(f"scope_map.shape={scope_map.shape}")
+    # print(scope_map[0, 0])
+    # print(list(set(scope_map.ravel())))
+
+    scope_map = scope_map[:, :, np.newaxis]
+    # print(f"scope_map.shape={scope_map.shape}")
+    # print(scope_map[0, 0])
+
     scope_map = np.repeat(scope_map, repeats=3, axis=2)
-    res_image = np.multiply(scope_map, np.array(foreground_image)[:, :, :3]) + np.multiply((1 - scope_map), np.array(background_image))
+    # print(f"scope_map.shape={scope_map.shape}")
+    # print(scope_map[0, 0])
+
+    human_layer = np.multiply(scope_map, one_human_image_RGB)
+    backgroud_layer = np.multiply((1 - scope_map), np.array(background_image))
+    blended_image = human_layer + backgroud_layer
     
-    #保存图片
-    res_image = Image.fromarray(np.uint8(res_image))
-    res_image.save(frames_blended_folder_path)
+    blended_image = Image.fromarray(np.uint8(blended_image))
+    blended_image.save(one_blended_image_path)
 
 
-def blend_humans_with_background(humans_folder_path, green_background_file_path, frames_blended_folder_path):
+def blend_humans_with_background(humans_folder_path, background_image_path, frames_blended_folder_path):
     print("call blend_humans_with_background")
 
-    humanseg_png = [filename for filename in os.listdir(humans_folder_path)]
-    for i, img in enumerate(humanseg_png):
-        img_path = os.path.join(humans_folder_path + '%d.png' % (i))
-        print(img_path)
-        output_path_img = frames_blended_folder_path + '%d.png' % i
-        print(output_path_img)
-        blend_one_human_with_background(img_path, green_background_file_path, output_path_img)
+    all_human_image_paths = [filename for filename in os.listdir(humans_folder_path)]
+
+    for i, one_human_image_name in enumerate(all_human_image_paths):
+        one_human_image_path = f"{humans_folder_path}{one_human_image_name}"
+        print(f"one_human_image_path = {one_human_image_path}")
+
+        if not os.path.exists(one_human_image_path):
+            print(f"one human image({one_human_image_path}) does not exist.")
+            continue
+
+        one_blended_image_path = f"{frames_blended_folder_path}{i}.png"
+        print(one_blended_image_path)
+
+        blend_one_human_with_background(one_human_image_path, background_image_path, one_blended_image_path)
    
 
 def init_canvas(width, height, color=(255, 255, 255)):
     print("call init_canvas")
 
     canvas = np.ones((height, width, 3), dtype="uint8")
+    # assign all element with specific color
     canvas[:] = color
     return canvas
 
@@ -106,46 +132,49 @@ def concatenate_frames_blended(frames_blended_folder_path, video_blended_file_pa
     files = os.listdir(frames_blended_folder_path)
 
     for i in range(len(files)):
-        img = cv2.imread(frames_blended_folder_path + '%d.png' % i)
-        # cv2.imshow("test", img)
-        # cv2.waitKey(0)
-        # img = cv2.resize(img, (1280,720))
-        out.write(img)#保存帧
+        one_frame_blended = frames_blended_folder_path + '%d.png' % i
+        if not os.path.exists(one_frame_blended):
+            continue
+
+        img = cv2.imread(one_frame_blended)
+        out.write(img)
     out.release()
 
 
 # Config
-video_file_path = 'workspace/sample.mp4'
-background_file_path = 'workspace/green.jpg'
+video_path = 'workspace/sample.mp4'
+video_blended_path = 'workspace/output.mp4'
+background_image_path = 'workspace/green.jpg'
+
 frames_folder_path = 'workspace/frames/'
 humans_folder_path = 'workspace/humans/'
 frames_blended_folder_path = 'workspace/frames_blended/'
-video_blended_file_path = 'workspace/output.mp4'
+
+background_size = (1920, 1080)
 
 if __name__ == "__main__":
-    # 第一步：视频->图像
     print("video to frames")
     if not os.path.exists(frames_folder_path):
         os.mkdir(frames_folder_path)
-        split_video_to_frames(video_file_path, frames_folder_path)
+        split_video_to_frames(video_path, frames_folder_path)
 
-    # 第二步：抠图
     print("frames to humans")
     if not os.path.exists(humans_folder_path):
         os.mkdir(humans_folder_path)
         turn_frames_to_humans(frames_folder_path, humans_folder_path)
 
-    # 第三步：生成绿幕并合成
     print("make green background")
-    if not os.path.exists(background_file_path):
-        make_background_file(1920, 1080, background_file_path)
+    if not os.path.exists(background_image_path):
+        make_background_file(*background_size, background_image_path)
 
     print("blend humans with background")
     if not os.path.exists(frames_blended_folder_path):
         os.mkdir(frames_blended_folder_path)
-        blend_humans_with_background(humans_folder_path, background_file_path, frames_blended_folder_path)
+        blend_humans_with_background(humans_folder_path, background_image_path, frames_blended_folder_path)
 
-    # 第四步：合成视频
     print("concatenate frames blended into video")
-    if not os.path.exists(video_blended_file_path):
-        concatenate_frames_blended(frames_blended_folder_path, video_blended_file_path, (1920, 1080))
+    if not os.path.exists(video_blended_path):
+        concatenate_frames_blended(frames_blended_folder_path, video_blended_path, background_size)
+
+
+
